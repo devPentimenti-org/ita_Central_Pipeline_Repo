@@ -2,6 +2,12 @@ name: PR check and Code Quality analysis
 
 on:
   workflow_call:   
+  inputs:
+      run-tests:                          
+        description: 'Run pytest + coverage checks'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
