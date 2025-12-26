@@ -1,0 +1,55 @@
+name: Reusable - Build & Deploy to Azure Web App
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'dev / staging / prod'
+        required: true
+        type: string
+    secrets:
+      azure-publish-profile:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout app code
+        uses: actions/checkout@v4
+
+      - name: Load environment config from central repo
+        uses: actions/checkout@v4
+        with:
+          repository: devPentimenti-org/ita_Central_Pipeline_Repo
+          ref: main
+          path: central-config
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION || '3.11' }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION || '1.8.5' }}
+
+      - name: Install dependencies
+        run: poetry install --no-root
+
+      - name: Make startup script executable
+        run: chmod +x ${{ env.STARTUP_SCRIPT || 'startup.sh' }}
+
+      - name: Prevent direct push to prod
+        if: github.ref == 'refs/heads/prod'
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if [[ ! "$COMMIT_MSG" =~ "Merge pull request" ]]; then
+            echo "::error::Direct pushes to prod not allowed"
+            exit 1
+          fi
+
+      - name: Zip artifact
+        run: zip -r release.zip . -x "tests/*" "*.git*" "central-config/*"
