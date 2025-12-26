@@ -101,11 +101,16 @@ jobs:
           poetry run coverage report --format=markdown > coverage_report.md && \
           poetry run coverage json -o coverage.json && \
           poetry run coverage xml -o coverage.xml
-      - name: Generate Coverage TXT Report
 
+
+      - name: Generate Coverage TXT Report
+        if: ${{ inputs.run-tests }}
         run: |
           poetry run coverage report -m > coverage.txt
+
+
       - name: Upload Coverage TXT Report
+        if: ${{ inputs.run-tests }}
         uses: actions/upload-artifact@v4
         with:
           name: coverage-txt-report
@@ -113,10 +118,13 @@ jobs:
 
 
       - name: Extract Coverage Percentage
+        if: ${{ inputs.run-tests }}
         run: |
           TOTAL_PERCENT=$(jq '.totals.percent_covered // 0' coverage.json | cut -d. -f1)
           echo "COVERAGE_PERCENT=$TOTAL_PERCENT" >> $GITHUB_ENV
+
       - name: Count Files with Coverage
+        if: ${{ inputs.run-tests }}
         run: |
           echo "FILES_COVERED=0" >> $GITHUB_ENV
           if [ -f coverage.json ] && jq -e '.files' coverage.json >/dev/null; then
