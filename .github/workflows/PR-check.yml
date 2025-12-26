@@ -88,6 +88,7 @@ jobs:
 
 
       - name: Run Tests with Coverage
+        if: ${{ inputs.run-tests }}
         run: |
           poetry run coverage run -m pytest -v --maxfail=1 --disable-warnings --color=yes \
           tests/unit penti_mongodb_store/tests/unit --junitxml=pytest.xml && \
@@ -257,7 +258,7 @@ jobs:
          message: |
           ## Test Coverage Report
           **Overall Coverage:** ${{ env.COVERAGE_PERCENT }}%
-          
+
       - name: Zip artifact for deployment pre-build
         run: zip release.zip ./* -r
           --exclude 'tests/*' \
