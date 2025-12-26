@@ -143,7 +143,6 @@ jobs:
           | Code Smells (Ruff)            | ${{ env.RUFF_SMELLS }}  |
           | Unused Imports (Ruff)         | ${{ env.UNUSED_IMPORTS }} |
           | Security Issues (Bandit)      | ${{ env.SECURITY_ISSUES }} |
-          | Dependency Vulnerabilities    | ${{ env.DEP_VULNS }}    |
           | Test Coverage Percentage      | ${{ env.COVERAGE_PERCENT }}% |
           > Report generated on $(date '+%Y-%m-%d at %H:%M UTC')"
           echo "$REPORT" >> $GITHUB_STEP_SUMMARY
