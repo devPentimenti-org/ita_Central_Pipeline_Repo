@@ -253,6 +253,7 @@ jobs:
 
 
       - name: Add Coverage Report to Summary
+        if: ${{ inputs.run-tests }}
         id: coverage_summary
         run: |
          echo "## Test Coverage Report" >> $GITHUB_STEP_SUMMARY
