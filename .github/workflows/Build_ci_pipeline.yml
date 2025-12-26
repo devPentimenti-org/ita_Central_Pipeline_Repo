@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       environment:
-        description: 'dev / staging / prod'
+        description: 'dev / main / prod'
         required: true
         type: string
     secrets:

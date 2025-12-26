@@ -87,6 +87,36 @@ jobs:
           fi
 
 
+      - name: Run Tests with Coverage
+        if: ${{ inputs.run-tests }}
+        run: |
+          poetry run coverage run -m pytest -v --maxfail=1 --disable-warnings --color=yes \
+          tests/unit penti_mongodb_store/tests/unit --junitxml=pytest.xml && \
+          poetry run coverage report --format=markdown > coverage_report.md && \
+          poetry run coverage json -o coverage.json && \
+          poetry run coverage xml -o coverage.xml
+      - name: Generate Coverage TXT Report
+
+        run: |
+          poetry run coverage report -m > coverage.txt
+      - name: Upload Coverage TXT Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-txt-report
+          path: coverage.txt
+
+
+      - name: Extract Coverage Percentage
+        run: |
+          TOTAL_PERCENT=$(jq '.totals.percent_covered // 0' coverage.json | cut -d. -f1)
+          echo "COVERAGE_PERCENT=$TOTAL_PERCENT" >> $GITHUB_ENV
+      - name: Count Files with Coverage
+        run: |
+          echo "FILES_COVERED=0" >> $GITHUB_ENV
+          if [ -f coverage.json ] && jq -e '.files' coverage.json >/dev/null; then
+            COVERED=$(jq '[to_entries[] | select(.value.summary.covered_lines > 0)] | length' coverage.json)
+            echo "FILES_COVERED=$COVERED" >> $GITHUB_ENV
+          fi
 
       # Generate Summary Report
       - name: Generate Summary Report
@@ -99,12 +129,13 @@ jobs:
           | Code Smells (Ruff)            | ${{ env.RUFF_SMELLS }}  |
           | Unused Imports (Ruff)         | ${{ env.UNUSED_IMPORTS }} |
           | Security Issues (Bandit)      | ${{ env.SECURITY_ISSUES }} |
+          | Dependency Vulnerabilities    | ${{ env.DEP_VULNS }}    |
+          | Test Coverage Percentage      | ${{ env.COVERAGE_PERCENT }}% |
           > Report generated on $(date '+%Y-%m-%d at %H:%M UTC')"
           echo "$REPORT" >> $GITHUB_STEP_SUMMARY
           echo "summary<<EOF" >> $GITHUB_OUTPUT
           echo "$REPORT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Comment PR - Summary
         if: github.event_name == 'pull_request'
         uses: thollander/actions-comment-pull-request@v2
@@ -136,7 +167,6 @@ jobs:
           echo "ruff_report<<EOF" >> $GITHUB_OUTPUT
           echo "$RUFF_REPORT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Comment PR - Ruff Code Smells Report
         if: github.event_name == 'pull_request' && env.RUFF_SMELLS != '0'
         uses: thollander/actions-comment-pull-request@v2
@@ -168,7 +198,6 @@ jobs:
           echo "unused_report<<EOF" >> $GITHUB_OUTPUT
           echo "$UNUSED_REPORT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Comment PR - Unused Imports Report
         if: github.event_name == 'pull_request' && env.UNUSED_IMPORTS != '0'
         uses: thollander/actions-comment-pull-request@v2
@@ -201,7 +230,6 @@ jobs:
           echo "$BANDIT_REPORT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-
       - name: Comment PR - Bandit Security Report
         if: github.event_name == 'pull_request' && env.SECURITY_ISSUES != '0'
         uses: thollander/actions-comment-pull-request@v2
@@ -209,6 +237,27 @@ jobs:
           comment_tag: bandit-security-report
           message: ${{ steps.bandit.outputs.bandit_report || 'No security issues.' }}
 
+
+      - name: Add Coverage Report to Summary
+        id: coverage_summary
+        run: |
+         echo "## Test Coverage Report" >> $GITHUB_STEP_SUMMARY
+         echo "" >> $GITHUB_STEP_SUMMARY
+         echo '```text' >> $GITHUB_STEP_SUMMARY
+         cat coverage.txt >> $GITHUB_STEP_SUMMARY
+         echo '```' >> $GITHUB_STEP_SUMMARY
+         echo "coverage_report<<EOF" >> $GITHUB_OUTPUT
+         cat coverage.txt >> $GITHUB_OUTPUT
+         echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Comment PR - Coverage Report
+        if: github.event_name == 'pull_request'
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+         comment_tag: coverage-report
+         message: |
+          ## Test Coverage Report
+          **Overall Coverage:** ${{ env.COVERAGE_PERCENT }}%
 
       - name: Zip artifact for deployment pre-build
         run: zip release.zip ./* -r
