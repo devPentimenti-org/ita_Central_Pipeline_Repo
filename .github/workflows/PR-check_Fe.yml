@@ -54,11 +54,12 @@ jobs:
           echo "ESLINT_SMELLS=0" >> $GITHUB_ENV
           echo "UNUSED_VARS=0" >> $GITHUB_ENV
           if [ -s eslint.json ]; then
-            UNUSED=$(jq '[.[].messages[] | select(.ruleId=="no-unused-vars")] | length' eslint.json)
-            TOTAL=$(jq '[.[].messages[]] | length' eslint.json)
-            SMELLS=$(( TOTAL - UNUSED ))
-            echo "ESLINT_SMELLS=$SMELLS" >> $GITHUB_ENV
-            echo "UNUSED_VARS=$UNUSED" >> $GITHUB_ENV
+          UNUSED=$(jq '[.[].messages[] | select(.ruleId=="no-unused-vars")] | length' eslint.json)
+          TOTAL=$(jq '[.[].messages[] | select(.ruleId != null)] | length' eslint.json)
+          SMELLS=$(( TOTAL - UNUSED ))
+
+          echo "UNUSED_VARS=$UNUSED" >> $GITHUB_ENV
+          echo "ESLINT_SMELLS=$SMELLS" >> $GITHUB_ENV
           fi
 
       - name: Install Semgrep
