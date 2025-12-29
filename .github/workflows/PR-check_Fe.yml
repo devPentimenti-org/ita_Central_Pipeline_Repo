@@ -45,21 +45,21 @@ jobs:
       - name: Check formatting (Prettier)
         run: npx prettier --check . || true
 
-      - name: Run ESLint
-        run: npx eslint . -f json -o eslint.json || true
+      - name: Run Linter
+        run: npx lint . -f json -o lint.json || true
 
-      - name: Analyze ESLint results
+      - name: Analyze Lint results
         run: |
-          if [ -s eslint.json ]; then
-            UNUSED=$(jq '[.[].messages[] | select(.ruleId=="no-unused-vars")] | length' eslint.json)
-            TOTAL=$(jq '[.[].messages[] | select(.ruleId != null)] | length' eslint.json)
+          if [ -s lint.json ]; then
+            UNUSED=$(jq '[.[].messages[] | select(.ruleId=="no-unused-vars")] | length' lint.json)
+            TOTAL=$(jq '[.[].messages[] | select(.ruleId != null)] | length' lint.json)
             SMELLS=$(( TOTAL - UNUSED ))
           else
             UNUSED=0
             SMELLS=0
           fi
           echo "UNUSED_VARS=$UNUSED" >> $GITHUB_ENV
-          echo "ESLINT_SMELLS=$SMELLS" >> $GITHUB_ENV
+          echo "LINT_SMELLS=$SMELLS" >> $GITHUB_ENV
 
       - name: Install Semgrep
         run: |
@@ -106,7 +106,7 @@ jobs:
 
           | Metric                     | Value |
           |----------------------------|-------|
-          | Code Smells (ESLint)       | ${{ env.ESLINT_SMELLS }} |
+          | Code Smells (Lint)         | ${{ env.LINT_SMELLS }} |
           | Unused Variables           | ${{ env.UNUSED_VARS }} |
           | Security Issues (Semgrep)  | ${{ env.SECURITY_ISSUES }} |
           | Test Coverage              | ${{ env.COVERAGE_PERCENT }}% |
@@ -124,18 +124,18 @@ jobs:
           comment_tag: js-quality-summary
           message: ${{ steps.summary.outputs.summary }}
 
-      - name: Generate ESLint Code Smells Report
-        id: eslint_smells
+      - name: Generate Lint Code Smells Report
+        id: lint_smells
         run: |
-          if [ "${{ env.ESLINT_SMELLS }}" -eq 0 ]; then
+          if [ "${{ env.LINT_SMELLS }}" -eq 0 ]; then
             TABLE="| No code smells found | | | |"
           else
             TABLE=$(jq -r '
               .[] | .messages[] | select(.ruleId != "no-unused-vars") | 
               "| - | \(.ruleId) | \(.line) | \(.message) |"
-            ' eslint.json)
+            ' lint.json)
           fi
-          REPORT="## Code Smells (ESLint)
+          REPORT="## Code Smells (Lint)
           | Rule | Line | Message |
           |------|------|---------|
           $TABLE"
