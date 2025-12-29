@@ -1,0 +1,167 @@
+name: PR check and Code Quality analysis (JS/TS)
+
+on:
+  workflow_call:
+    inputs:
+      run-tests:
+        description: 'Run unit tests + coverage'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+  actions: read
+  checks: write
+
+jobs:
+  quality-checks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate PR
+        uses: neofinancial/ticket-check-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ticketLink: 'https://pentimenti1.atlassian.net/browse/PD-%ticketNumber%'
+          ticketPrefix: 'PD-'
+          titleRegex: '^PD-(?<ticketNumber>\d+)'
+          titleFormat: '%prefix%%id%: %title%'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Check formatting (Prettier)
+        run: npx prettier --check .
+
+      - name: Run ESLint
+        run: |
+          npx eslint . -f json -o eslint.json || true
+
+      - name: Analyze ESLint results
+        run: |
+          echo "ESLINT_SMELLS=0" >> $GITHUB_ENV
+          echo "UNUSED_VARS=0" >> $GITHUB_ENV
+          if [ -s eslint.json ]; then
+            UNUSED=$(jq '[.[].messages[] | select(.ruleId=="no-unused-vars")] | length' eslint.json)
+            TOTAL=$(jq '[.[].messages[]] | length' eslint.json)
+            SMELLS=$(( TOTAL - UNUSED ))
+            echo "ESLINT_SMELLS=$SMELLS" >> $GITHUB_ENV
+            echo "UNUSED_VARS=$UNUSED" >> $GITHUB_ENV
+          fi
+
+      - name: Run Semgrep Security Scan
+        run: |
+          npx semgrep scan --config=auto --json > semgrep.json || true
+
+      - name: Count Security Issues
+        run: |
+          echo "SECURITY_ISSUES=0" >> $GITHUB_ENV
+          if [ -f semgrep.json ]; then
+            echo "SECURITY_ISSUES=$(jq '.results | length' semgrep.json)" >> $GITHUB_ENV
+          fi
+
+      - name: Run Tests with Coverage
+        if: ${{ inputs.run-tests }}
+        run: npm test -- --coverage
+
+      - name: Extract Coverage Percentage
+        if: ${{ inputs.run-tests }}
+        run: |
+          COVERAGE=$(jq '.total.lines.pct // 0' coverage/coverage-summary.json | cut -d. -f1)
+          echo "COVERAGE_PERCENT=$COVERAGE" >> $GITHUB_ENV
+
+      - name: Upload Coverage Artifact
+        if: ${{ inputs.run-tests }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+
+      - name: Generate Summary Report
+        id: summary
+        run: |
+          REPORT="## Code Quality & Test Summary
+
+          | Metric                     | Value |
+          |---------------------------|-------|
+          | Code Smells (ESLint)      | ${{ env.ESLINT_SMELLS }} |
+          | Unused Variables          | ${{ env.UNUSED_VARS }} |
+          | Security Issues (Semgrep) | ${{ env.SECURITY_ISSUES }} |
+          | Test Coverage             | ${{ env.COVERAGE_PERCENT }}% |
+
+          > Generated on $(date '+%Y-%m-%d %H:%M UTC')"
+          echo "$REPORT" >> $GITHUB_STEP_SUMMARY
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$REPORT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Comment PR - Summary
+        if: github.event_name == 'pull_request'
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          comment_tag: js-quality-summary
+          message: ${{ steps.summary.outputs.summary }}
+
+      - name: Generate ESLint Code Smells Report
+        id: eslint_smells
+        run: |
+          if [ "${{ env.ESLINT_SMELLS }}" -eq 0 ]; then
+            TABLE="| No code smells found | | | | |"
+          else
+            TABLE=$(jq -r '
+              .[]
+              | .messages[]
+              | select(.ruleId != "no-unused-vars")
+              | "| - | \(.ruleId) | \(.line) | \(.message) |"
+            ' eslint.json)
+          fi
+          REPORT="## Code Smells (ESLint)
+          | Rule | Line | Message |
+          |------|------|---------|
+          $TABLE"
+          echo "$REPORT" >> $GITHUB_STEP_SUMMARY
+          echo "report<<EOF" >> $GITHUB_OUTPUT
+          echo "$REPORT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+
+      - name: Generate Security Report
+        id: semgrep
+        run: |
+          if [ "${{ env.SECURITY_ISSUES }}" -eq 0 ]; then
+            TABLE="| No security issues found | | | |"
+          else
+            TABLE=$(jq -r '
+              .results[]
+              | "| \(.check_id) | \(.path) | \(.start.line) | \(.extra.message) |"
+            ' semgrep.json)
+          fi
+          REPORT="## Security Vulnerabilities (Semgrep)
+          | Rule | File | Line | Message |
+          |------|------|------|---------|
+          $TABLE"
+          echo "$REPORT" >> $GITHUB_STEP_SUMMARY
+          echo "report<<EOF" >> $GITHUB_OUTPUT
+          echo "$REPORT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Comment PR - Security Report
+        if: github.event_name == 'pull_request' && env.SECURITY_ISSUES != '0'
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          comment_tag: js-security-report
+          message: ${{ steps.semgrep.outputs.report }}
+
+  
