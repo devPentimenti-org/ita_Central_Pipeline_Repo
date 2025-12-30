@@ -45,10 +45,14 @@ jobs:
       - name: Check formatting (Prettier)
         run: npx prettier --check . || true
 
-      - name: Run Linter
-        run: npx lint . -f json -o lint.json || true
+      - name: Run ESLint (JSON output)
+        run: |
+          npx eslint . \
+            --ext .js,.jsx,.ts,.tsx \
+            --format json \
+            --output-file lint.json || true
 
-      - name: Analyze Lint results
+      - name: Analyze ESLint results
         run: |
           if [ -s lint.json ]; then
             UNUSED=$(jq '[.[].messages[] | select(.ruleId=="no-unused-vars")] | length' lint.json)
@@ -58,9 +62,10 @@ jobs:
             UNUSED=0
             SMELLS=0
           fi
+
           echo "UNUSED_VARS=$UNUSED" >> $GITHUB_ENV
           echo "LINT_SMELLS=$SMELLS" >> $GITHUB_ENV
-
+          
       - name: Install Semgrep
         run: |
           pip install --user semgrep
