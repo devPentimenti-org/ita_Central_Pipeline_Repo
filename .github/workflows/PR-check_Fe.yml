@@ -133,17 +133,32 @@ jobs:
         id: lint_smells
         run: |
           if [ "${{ env.LINT_SMELLS }}" -eq 0 ]; then
-            TABLE="| No code smells found | | | |"
+            TABLE="| No | No code smells found | | |"
           else
             TABLE=$(jq -r '
-              .[] | .messages[] | select(.ruleId != "no-unused-vars") | 
-              "| - | \(.ruleId) | \(.line) | \(.message) |"
-            ' lint.json)
+            [
+            .[] | .filePath as $file |
+            .messages[] |
+            select(.ruleId != "no-unused-vars") |
+            {
+              file: ($file | split("/") | last),
+              path: $file,
+              line: .line,
+              message: .message
+            }
+          ]
+          | to_entries
+          | .[]
+          | "| \(.key + 1) | \(.value.path) | \(.value.line) | \(.value.message) |"
+          ' lint.json)
           fi
+
           REPORT="## Code Smells (Lint)
-          | Rule | Line | Message |
-          |------|------|---------|
+
+          | Sno | File Path | Line | Message |
+          |-----|----------|------|---------|
           $TABLE"
+
           echo "$REPORT" >> $GITHUB_STEP_SUMMARY
           echo "report<<EOF" >> $GITHUB_OUTPUT
           echo "$REPORT" >> $GITHUB_OUTPUT
