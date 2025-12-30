@@ -56,20 +56,24 @@ jobs:
         run: |
           if [ -s lint.json ]; then
             UNUSED=$(jq '
-            [.[].messages[] 
-              | select(
-                .ruleId == "no-unused-vars" or
-                .ruleId == "@typescript-eslint/no-unused-vars" or
-                (.ruleId | startswith("unused-imports"))
-                )
+            [
+             .[].messages[]
+             | select(
+                (.ruleId == "no-unused-vars") or
+                (.ruleId == "@typescript-eslint/no-unused-vars") or
+                (.ruleId != null and (.ruleId | startswith("unused-imports")))
+              )
             ] | length
             ' lint.json)
 
-            TOTAL=$(jq '[.[].messages[] | select(.ruleId != null)] | length' lint.json)
+            TOTAL=$(jq '
+            [.[].messages[] | select(.ruleId != null)] | length
+            ' lint.json)
+
             SMELLS=$(( TOTAL - UNUSED ))
           else
-            UNUSED=0
-            SMELLS=0
+           UNUSED=0
+           SMELLS=0
           fi
 
           echo "UNUSED_VARS=$UNUSED" >> $GITHUB_ENV
@@ -179,19 +183,23 @@ jobs:
         id: unused
         run: |
           if [ "${{ env.UNUSED_VARS }}" -eq 0 ]; then
-             TABLE="| No unused imports or variables found | | |"
+            TABLE="| No unused imports or variables found | | |"
           else
-             TABLE=$(jq -r '
-             [
-               .[] | .filePath as $file |
-               .messages[] |
-               select(.ruleId | test("unused")) |
+            TABLE=$(jq -r '
+            [
+              .[] | .filePath as $file |
+              .messages[] |
+              select(
+                (.ruleId == "no-unused-vars") or
+                (.ruleId == "@typescript-eslint/no-unused-vars") or
+                (.ruleId != null and (.ruleId | startswith("unused-imports")))
+              ) |
               {
                 path: $file,
                 line: .line,
                 message: .message
               }
-              ]
+            ]
             | to_entries
             | .[]
             | "| \(.key + 1) | \(.value.path) | \(.value.line) | \(.value.message) |"
